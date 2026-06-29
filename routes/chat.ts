@@ -21,7 +21,7 @@ import { type Review } from '../data/types'
 import logger from '../lib/logger'
 import { Counter } from 'prom-client'
 
-export function summarizeLlmError (error: unknown): string {
+export function summarizeLlmError(error: unknown): string {
   if (!(error instanceof Error)) {
     return String(error).split('\n')[0]
   }
@@ -39,14 +39,23 @@ export function summarizeLlmError (error: unknown): string {
 const botName = config.get<string>('application.chatBot.name')
 const appName = config.get<string>('application.name')
 
-export async function getUserId (req: Request): Promise<number | undefined> {
+function escapeHtml(value: unknown): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+}
+
+export async function getUserId(req: Request): Promise<number | undefined> {
   const token = utils.jwtFrom(req)
   if (!token) return undefined
   const decoded = security.decode(token) as { data?: { id?: number } } | undefined
   return decoded?.data?.id
 }
 
-export async function getUserNameFromToken (req: Request): Promise<string | undefined> {
+export async function getUserNameFromToken(req: Request): Promise<string | undefined> {
   const userId = await getUserId(req)
   if (!userId) return undefined
   const user = await UserModel.findByPk(userId, { attributes: ['username'] })
@@ -79,7 +88,7 @@ const metricToolCalls = new Counter({
 })
 
 // vuln-code-snippet start chatbotGreedyInjectionChallenge
-export function buildSystemPrompt (userName?: string) { // vuln-code-snippet neutral-line chatbotGreedyInjectionChallenge
+export function buildSystemPrompt(userName?: string) { // vuln-code-snippet neutral-line chatbotGreedyInjectionChallenge
   const userIdentifier = userName ? `\nThe customer you are currently chatting with is ${userName}.` : ''
   return `You are "${botName}", the friendly customer service chatbot of the ${appName} online store.
 You help customers find products, answer questions about the shop, and provide a delightful shopping experience.
@@ -111,7 +120,7 @@ const provider = createOpenAICompatible({
   baseURL: config.get<string>('application.chatBot.llmApiUrl')
 })
 
-export function chat () {
+export function chat() {
   return async (req: Request, res: Response) => {
     const chatTools = {
       searchProducts: tool({
@@ -214,9 +223,15 @@ export function chat () {
 
       for await (const event of result.fullStream) {
         switch (event.type) {
-          case 'text-delta':
+          //XSS fix
+          /*case 'text-delta':
             res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: event.text } }] })}\n\n`)
+            break*/
+          case 'text-delta': {
+            const safeText = escapeHtml(event.text)
+            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: safeText } }] })}\n\n`)
             break
+          }
           case 'tool-call':
             challengeUtils.solveIf(challenges.aiDebuggingChallenge, () => {
               const token = utils.jwtFrom(req)
@@ -251,9 +266,14 @@ export function chat () {
               metricOutputTokens.labels({ type: 'text' }).inc(event.totalUsage.outputTokenDetails?.textTokens ?? 0)
             }
             break
-          case 'error':
+          /*case 'error':
             res.write(`data: ${JSON.stringify({ error: `LLM error: ${event.error as string}` })}\n\n`)
+            break*/
+          case 'error': {
+            const safeError = escapeHtml(summarizeLlmError(event.error))
+            res.write(`data: ${JSON.stringify({ error: `LLM error: ${safeError}` })}\n\n`)
             break
+          }
         }
       }
 

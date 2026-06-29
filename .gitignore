@@ -71,3 +71,10 @@ config/*.yml
 # Misc
 .playwright-mcp/
 cypress/screenshots/
+final-submission/
+evidence/
+*.csv
+*.pdf
+evidence/
+*.csv
+*.pdf
