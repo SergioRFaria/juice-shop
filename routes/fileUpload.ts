@@ -4,10 +4,10 @@
  */
 
 import fs from 'node:fs'
-import vm from 'node:vm'
+//import vm from 'node:vm'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
-import yaml from 'js-yaml'
+//import yaml from 'js-yaml'
 import unzipper from 'unzipper'
 import { type NextFunction, type Request, type Response } from 'express'
 
@@ -16,7 +16,7 @@ import { challenges } from '../data/datacache'
 import * as utils from '../lib/utils'
 import { parseXmlString } from '../lib/xml'
 
-function ensureFileIsPassed ({ file }: Request, res: Response, next: NextFunction) {
+function ensureFileIsPassed({ file }: Request, res: Response, next: NextFunction) {
   if (file != null) {
     next()
   } else {
@@ -24,7 +24,7 @@ function ensureFileIsPassed ({ file }: Request, res: Response, next: NextFunctio
   }
 }
 
-async function extractZipBuffer (buffer: Buffer) {
+async function extractZipBuffer(buffer: Buffer) {
   const directory = await unzipper.Open.buffer(buffer)
   for (const entry of directory.files) {
     const fileName = entry.path
@@ -36,7 +36,7 @@ async function extractZipBuffer (buffer: Buffer) {
   }
 }
 
-async function handleZipFileUpload ({ file }: Request, res: Response, next: NextFunction) {
+async function handleZipFileUpload({ file }: Request, res: Response, next: NextFunction) {
   if (!utils.endsWith(file?.originalname.toLowerCase(), '.zip')) {
     next()
     return
@@ -52,14 +52,14 @@ async function handleZipFileUpload ({ file }: Request, res: Response, next: Next
   res.status(204).end()
 }
 
-function checkUploadSize ({ file }: Request, res: Response, next: NextFunction) {
+function checkUploadSize({ file }: Request, res: Response, next: NextFunction) {
   if (file != null) {
     challengeUtils.solveIf(challenges.uploadSizeChallenge, () => { return file?.size > 100000 })
   }
   next()
 }
 
-function checkFileType ({ file }: Request, res: Response, next: NextFunction) {
+function checkFileType({ file }: Request, res: Response, next: NextFunction) {
   const fileType = file?.originalname.substr(file.originalname.lastIndexOf('.') + 1).toLowerCase()
   challengeUtils.solveIf(challenges.uploadTypeChallenge, () => {
     return !(fileType === 'pdf' || fileType === 'xml' || fileType === 'zip' || fileType === 'yml' || fileType === 'yaml')
@@ -67,7 +67,7 @@ function checkFileType ({ file }: Request, res: Response, next: NextFunction) {
   next()
 }
 
-async function handleXmlUpload ({ file }: Request, res: Response, next: NextFunction) {
+async function handleXmlUpload({ file }: Request, res: Response, next: NextFunction) {
   if (utils.endsWith(file?.originalname.toLowerCase(), '.xml')) {
     challengeUtils.solveIf(challenges.deprecatedInterfaceChallenge, () => { return true })
     if (((file?.buffer) != null) && utils.isChallengeEnabled(challenges.deprecatedInterfaceChallenge)) { // XXE attacks in Docker/Heroku containers regularly cause "segfault" crashes
@@ -98,7 +98,7 @@ async function handleXmlUpload ({ file }: Request, res: Response, next: NextFunc
   next()
 }
 
-function handleYamlUpload ({ file }: Request, res: Response, next: NextFunction) {
+/* function handleYamlUpload ({ file }: Request, res: Response, next: NextFunction) {
   if (utils.endsWith(file?.originalname.toLowerCase(), '.yml') || utils.endsWith(file?.originalname.toLowerCase(), '.yaml')) {
     challengeUtils.solveIf(challenges.deprecatedInterfaceChallenge, () => { return true })
     if (((file?.buffer) != null) && utils.isChallengeEnabled(challenges.deprecatedInterfaceChallenge)) {
@@ -127,6 +127,19 @@ function handleYamlUpload ({ file }: Request, res: Response, next: NextFunction)
       next(new Error('B2B customer complaints via file upload have been deprecated for security reasons (' + file?.originalname + ')'))
     }
   }
+  res.status(204).end()
+} */
+function handleYamlUpload({ file }: Request, res: Response, next: NextFunction) {
+  if (utils.endsWith(file?.originalname.toLowerCase(), '.yml') || utils.endsWith(file?.originalname.toLowerCase(), '.yaml')) {
+    challengeUtils.solveIf(challenges.deprecatedInterfaceChallenge, () => {
+      return true
+    })
+
+    res.status(410)
+    next(new Error('B2B customer complaints via YAML file upload have been deprecated for security reasons (' + file?.originalname + ')'))
+    return
+  }
+
   res.status(204).end()
 }
 
